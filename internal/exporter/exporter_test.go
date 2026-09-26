@@ -1,6 +1,7 @@
 package exporter
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -8,70 +9,28 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/imaleeexx/tvheadend-exporter/internal/config"
+	"github.com/imaleeexx/tvheadend-exporter/internal/fake"
 	"github.com/imaleeexx/tvheadend-exporter/internal/tvh"
 )
 
-var fixtures = map[string]string{
-	"serverinfo":           "serverinfo.json",
-	"status/subscriptions": "subscriptions.json",
-	"status/connections":   "connections.json",
-	"status/inputs":        "inputs.json",
-	"mpegts/network/grid":  "networks.json",
-	"mpegts/mux/grid":      "muxes.json",
-	"mpegts/service/grid":  "services.json",
-	"channel/grid":         "channels.json",
-	"channeltag/grid":      "channeltags.json",
-	"access/entry/grid":    "access.json",
-	"dvr/entry/grid":       "dvr_entries.json",
-	"dvr/config/grid":      "dvr_configs.json",
-	"dvr/autorec/grid":     "empty_grid.json",
-	"dvr/timerec/grid":     "empty_grid.json",
-}
-
-// fakeTVH serves fixtures; while down is set every request returns 500.
-type fakeTVH struct {
-	*httptest.Server
-	down atomic.Bool
-}
-
-func newFakeTVH(t *testing.T) *fakeTVH {
+// newFakeTVH starts a fake Tvheadend accepting user/pw. It fails the test
+// (from the test goroutine, at cleanup) on any non-GET or passwd request.
+func newFakeTVH(t *testing.T) *fake.Server {
 	t.Helper()
-	f := &fakeTVH{}
-	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			t.Errorf("non-GET request %s %s", r.Method, r.URL.Path)
-		}
-		if u, p, ok := r.BasicAuth(); !ok || u != "user" || p != "pw" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		if f.down.Load() {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		name, ok := fixtures[strings.TrimPrefix(r.URL.Path, "/api/")]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		b, err := os.ReadFile(filepath.Join("..", "testdata", name))
-		if err != nil {
-			t.Error(err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		_, _ = w.Write(b)
-	}))
-	t.Cleanup(f.Close)
-	return f
+	return fake.NewServer(t, "user", "pw")
+}
+
+// down makes every Tvheadend endpoint return 500.
+func down(f *fake.Server) {
+	for name := range tvh.Endpoints {
+		f.Fail(name, http.StatusInternalServerError)
+	}
 }
 
 func testConfig(url string) config.Config {
@@ -130,7 +89,7 @@ func TestNew_CatalogCoversCollectorsButNotRuntime(t *testing.T) {
 
 func TestCheck(t *testing.T) {
 	f := newFakeTVH(t)
-	e := newTestExporter(t, f.URL)
+	e := newTestExporter(t, f.URL())
 	if err := e.Check(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +98,7 @@ func TestCheck(t *testing.T) {
 		t.Error("Check should populate tvheadend_build_info")
 	}
 
-	bad := testConfig(f.URL)
+	bad := testConfig(f.URL())
 	bad.Password = "wrong"
 	e2, err := New(bad, discard(), "v", "c")
 	if err != nil {
@@ -165,7 +124,7 @@ func TestHandler_StaticEndpoints(t *testing.T) {
 
 func TestHealthz_FollowsStatusPoll(t *testing.T) {
 	f := newFakeTVH(t)
-	e := newTestExporter(t, f.URL)
+	e := newTestExporter(t, f.URL())
 	h := e.Handler()
 	if code, _ := get(t, h, "/healthz"); code != http.StatusServiceUnavailable {
 		t.Fatalf("healthz before any poll = %d, want 503", code)
@@ -188,11 +147,11 @@ func TestHealthz_FollowsStatusPoll(t *testing.T) {
 
 func TestPollStatus_FailureSetsDown(t *testing.T) {
 	f := newFakeTVH(t)
-	e := newTestExporter(t, f.URL)
+	e := newTestExporter(t, f.URL())
 	if err := e.pollStatus(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	f.down.Store(true)
+	down(f)
 	if err := e.pollStatus(context.Background()); err == nil {
 		t.Fatal("want error while tvheadend is down")
 	}
@@ -203,7 +162,7 @@ func TestPollStatus_FailureSetsDown(t *testing.T) {
 
 func TestPollTopology(t *testing.T) {
 	f := newFakeTVH(t)
-	e := newTestExporter(t, f.URL)
+	e := newTestExporter(t, f.URL())
 	if err := e.pollTopology(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +172,7 @@ func TestPollTopology(t *testing.T) {
 			t.Errorf("/metrics missing %q after topology poll", want)
 		}
 	}
-	f.down.Store(true)
+	down(f)
 	if err := e.pollTopology(context.Background()); err == nil {
 		t.Fatal("want error while tvheadend is down")
 	}
@@ -221,7 +180,7 @@ func TestPollTopology(t *testing.T) {
 
 func TestRun_StopsOnCancel(t *testing.T) {
 	f := newFakeTVH(t)
-	e := newTestExporter(t, f.URL)
+	e := newTestExporter(t, f.URL())
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- e.Run(ctx) }()
@@ -245,7 +204,7 @@ func TestRun_PortInUseReturnsError(t *testing.T) {
 	defer func() { _ = ln.Close() }()
 
 	f := newFakeTVH(t)
-	cfg := testConfig(f.URL)
+	cfg := testConfig(f.URL())
 	cfg.Listen = ln.Addr().String()
 	e, err := New(cfg, discard(), "v", "c")
 	if err != nil {
@@ -260,5 +219,201 @@ func TestRun_PortInUseReturnsError(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run deadlocked when the listen address was in use")
+	}
+}
+
+// syncBuffer is a goroutine-safe log sink: pollers write while the test reads.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+// e2ePassword is distinctive so the test can prove it never leaks.
+const e2ePassword = "pw-E2E-s3cret-credential"
+
+func newE2EExporter(t *testing.T, srvURL string, logSink io.Writer) *Exporter {
+	t.Helper()
+	env := map[string]string{
+		"TVH_URL": srvURL, "TVH_USERNAME": "u", "TVH_PASSWORD": e2ePassword,
+		"TVH_POLL_STATUS": "50ms", "TVH_POLL_TOPOLOGY": "200ms", "TVH_SESSION_GRACE": "100ms",
+		"TVH_LISTEN": "127.0.0.1:0",
+	}
+	cfg, err := config.Load(nil, func(k string) string { return env[k] }, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := slog.New(slog.NewJSONHandler(logSink, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	e, err := New(cfg, log, "test", "abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e
+}
+
+// eventually polls cond until it returns "" (success) or the deadline passes,
+// then fails with the last reported problem. It replaces bare fixed sleeps so
+// slow -race runs do not flake, without weakening any assertion.
+func eventually(t *testing.T, what string, cond func() string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		msg := cond()
+		if msg == "" {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: %s", what, msg)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
+// missing reports the wanted substrings absent from out ("" = all present).
+func missing(out string, wants ...string) string {
+	var miss []string
+	for _, w := range wants {
+		if !strings.Contains(out, w) {
+			miss = append(miss, w)
+		}
+	}
+	if len(miss) == 0 {
+		return ""
+	}
+	return "missing:\n  " + strings.Join(miss, "\n  ")
+}
+
+// present reports the first forbidden substring found in out ("" = none).
+func present(out string, bads ...string) string {
+	for _, b := range bads {
+		if strings.Contains(out, b) {
+			return "unexpectedly contains " + b
+		}
+	}
+	return ""
+}
+
+func TestEndToEnd(t *testing.T) {
+	srv := fake.NewServer(t, "u", e2ePassword)
+	var logBuf syncBuffer
+	e := newE2EExporter(t, srv.URL(), &logBuf)
+	h := e.Handler()
+	metricsBody := func() string { _, b := get(t, h, "/metrics"); return b }
+
+	if err := e.Check(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- e.Run(ctx) }()
+
+	// Wait at least one topology interval (200ms) before the first look.
+	time.Sleep(250 * time.Millisecond)
+	var out string
+	eventually(t, "initial scrape", func() string {
+		out = metricsBody()
+		return missing(out,
+			"tvheadend_up 1",
+			`tvheadend_build_info{api_version="19",server_name="Tvheadend",version="4.3-2070~g2beb6c9-dirty"} 1`,
+			`tvheadend_subscription_info{channel="La 1 HD",city="",client="Kodi Media Center",country="",id="15268",peer="203.0.113.10",profile="htsp",service="IPTV #2/IPTV/LA 1 HD IPTV/Service01",state="Running",title="203.0.113.10 [ alice | Kodi Media Center ]",user="alice"} 1`,
+			`tvheadend_user_active_streams{user="anonymous"} 1`,
+			`tvheadend_subscriptions_active{profile="pass",type="http"} 2`,
+			`tvheadend_input_bitrate_bps{input="IPTV #1",uuid="a83ead2b96370a88f68dffe6382d32d9"} 2.092064e+06`,
+			`tvheadend_muxes{enabled="true",network="THOTH",scan_result="fail"} 1`,
+			`tvheadend_dvr_entries{config="! New config",creator="bob",owner="admin",status="scheduled"} 1`,
+			`tvheadend_user_conn_limit{user="alice"} 4`,
+			`tvheadend_exporter_last_success_timestamp_seconds{group="topology"}`,
+			`tvheadend_capability{name="timeshift"} 1`,
+			"go_goroutines",
+		)
+	})
+	// Security: no URLs, tokens or credentials in the exposition.
+	if msg := present(out, "passwd", "token=", "http://", "https://", e2ePassword); msg != "" {
+		t.Error("/metrics " + msg)
+	}
+	if code, body := get(t, h, "/healthz"); code != 200 {
+		t.Errorf("healthz=%d %s", code, body)
+	}
+
+	// Sessions disappear -> per-id gauges gone, ended counter + session_end log line.
+	srv.Set("subscriptions", "empty_grid.json")
+	eventually(t, "sessions gone", func() string {
+		out = metricsBody()
+		if msg := present(out, `tvheadend_subscription_info{`); msg != "" {
+			return msg
+		}
+		if msg := missing(out, `tvheadend_sessions_ended_total{channel="La 1 HD",city="",client="Kodi Media Center",country="",peer="203.0.113.10",profile="htsp",user="alice"} 1`); msg != "" {
+			return msg
+		}
+		return missing(logBuf.String(), `"event":"session_end"`, `"reason":"gone"`)
+	})
+
+	// Secrets in free-text fields: service URLs are reduced to scheme://host
+	// and DVR titles collapse to "DVR"; credentials, tokens, URL paths and
+	// programme titles must not appear in /metrics or the log.
+	srv.Set("subscriptions", "subscriptions_secrets.json")
+	eventually(t, "sanitised subscription", func() string {
+		out = metricsBody()
+		return missing(out, `tvheadend_subscription_info{channel="XTRM",city="",client="tvh DVR",country="",id="15300",peer="192.0.2.44",profile="pass",service="IPTV #1/THOTH/http://iptv.example.net:8080 Service01",state="Running",title="DVR",user="dave"} 1`)
+	})
+	secrets := []string{"hunter2", "dave:", "token=", "s3cr3tT0ken", "/live/", "123.ts", "Secret Programme", e2ePassword, "passwd"}
+	if msg := present(out, secrets...); msg != "" {
+		t.Error("/metrics " + msg)
+	}
+
+	// Review Focus 3: sessions live, then the status poll fails for longer
+	// than the grace -> up 0, healthz 503, sessions end with reason=lost and
+	// no stale per-id gauges remain.
+	srv.Set("subscriptions", "subscriptions.json")
+	eventually(t, "sessions restored", func() string {
+		return missing(metricsBody(), `tvheadend_subscription_info{channel="La 1 HD",city="",client="Kodi Media Center",country="",id="15268"`)
+	})
+	srv.Fail("subscriptions", http.StatusInternalServerError)
+	time.Sleep(250 * time.Millisecond) // > grace (100ms) and > 3x poll (150ms)
+	eventually(t, "status poll failing", func() string {
+		out = metricsBody()
+		if msg := missing(out, "tvheadend_up 0"); msg != "" {
+			return msg
+		}
+		if msg := present(out, `tvheadend_subscription_info{`); msg != "" {
+			return msg
+		}
+		if code, _ := get(t, h, "/healthz"); code != http.StatusServiceUnavailable {
+			return "healthz still 200"
+		}
+		return missing(logBuf.String(), `"reason":"lost"`)
+	})
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Run: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return after cancel")
+	}
+	if msg := present(logBuf.String(), secrets...); msg != "" {
+		t.Error("log " + msg)
+	}
+}
+
+func TestCheck_Unauthorized(t *testing.T) {
+	srv := fake.NewServer(t, "u", "OTHER")
+	e := newE2EExporter(t, srv.URL(), io.Discard)
+	if err := e.Check(context.Background()); err == nil || !strings.Contains(err.Error(), "unauthorized") {
+		t.Errorf("want unauthorized error, got %v", err)
 	}
 }
