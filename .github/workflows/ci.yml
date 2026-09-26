@@ -22,7 +22,10 @@ jobs:
       # reliably put promtool on PATH for downstream consumers.
       - name: install promtool
         run: |
-          curl -sSL https://github.com/prometheus/prometheus/releases/download/v3.14.0/prometheus-3.14.0.linux-amd64.tar.gz | tar xz --strip-components=1 -C /usr/local/bin --wildcards '*/promtool'
+          mkdir -p "$RUNNER_TEMP/promtool"
+          curl -fsSL https://github.com/prometheus/prometheus/releases/download/v3.14.0/prometheus-3.14.0.linux-amd64.tar.gz \
+            | tar xz --strip-components=1 -C "$RUNNER_TEMP/promtool" --wildcards '*/promtool'
+          echo "$RUNNER_TEMP/promtool" >> "$GITHUB_PATH"
       - run: promtool check rules deploy/prometheus/rules/*.yml
       - run: cd deploy/prometheus && promtool test rules rules_test.yml
   dashboards:
@@ -45,6 +48,23 @@ jobs:
                       assert "expr" in t, (f, p["title"])
               print("ok", f, len(d["panels"]), "panels")
           PY
+  # Validates the goreleaser config and exercises the full release build
+  # (binaries, archives, per-arch images from deploy/Dockerfile) on every PR
+  # and push to main, without publishing anything.
+  snapshot:
+    if: "!startsWith(github.ref, 'refs/tags/v')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-go@v5
+        with: {go-version-file: go.mod}
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: goreleaser/goreleaser-action@v6
+        with: {version: "~> v2", args: check}
+      - uses: goreleaser/goreleaser-action@v6
+        with: {version: "~> v2", args: release --snapshot --clean --skip=publish}
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [test, rules, dashboards]

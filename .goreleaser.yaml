@@ -32,5 +32,9 @@ dockers_v2:
       - go.sum
       - cmd
       - internal
+# Explicit so `goreleaser check` / snapshot builds do not depend on a git
+# remote being configured.
+release:
+  github: {owner: ImAleeexx, name: tvheadend-exporter}
 changelog:
   use: git
