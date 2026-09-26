@@ -146,9 +146,12 @@ DASHBOARDS = {
         ts("Output bandwidth per user", f"sum by (user) (tvheadend_subscription_bitrate_out_bps{{{U}}})", "{{user}}", unit="bps", stacked=True),
         ts("Watch time per day", f"sum by (user) (increase(tvheadend_session_seconds_total{{{U}}}[1d]))", "{{user}}", unit="s"),
         bar("Channels watched (7d)", f"topk(15, sum by (channel) (increase(tvheadend_session_seconds_total{{{U}}}[7d])))", "{{channel}}", unit="s"),
-        # N4 (preflight): use the recording rule instead of recomputing increase(...[7d]) raw.
-        # The rule aggregates by `client` only, so the $user filter no longer applies here.
-        bar("Client apps (7d)", "tvheadend:client_watch_seconds:increase7d", "{{client}}", unit="s"),
+        # Review fix round 1 (reverses N4 for this panel): spec §9 places this panel under the
+        # Users dashboard's $user-scoped section, so it must respect $user. Use the raw
+        # increase() over the session counter (matching the other $user-scoped panels here)
+        # instead of the tvheadend:client_watch_seconds:increase7d recording rule, which
+        # aggregates by `client` only and drops the `user` label needed to filter by $user.
+        bar("Client apps (7d)", f"sum by (client) (increase(tvheadend_session_seconds_total{{{U}}}[7d]))", "{{client}}", unit="s"),
         bar("Locations (7d)", f'sum by (country, city) (increase(tvheadend_session_seconds_total{{{U}}}[7d]))', "{{country}} {{city}}", unit="s"),
         # D7 (preflight): title promises p50 AND p90 — plot both as distinct targets/refIds.
         ts_multi("Session duration (p50 / p90)", [

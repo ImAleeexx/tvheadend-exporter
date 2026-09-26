@@ -547,7 +547,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "tvheadend:client_watch_seconds:increase7d",
+          "expr": "sum by (client) (increase(tvheadend_session_seconds_total{user=~\"$user\"}[7d]))",
           "legendFormat": "{{client}}",
           "refId": "A",
           "instant": true,
