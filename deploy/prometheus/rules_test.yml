@@ -19,8 +19,11 @@ tests:
         values: '0x10'
       - series: 'tvheadend_input_subscriptions{uuid="u1",input="IPTV #1"}'
         values: '2x10'
+      # The exporter emits no series for an absent status, so on a clean
+      # system the completedError series does not exist until the first
+      # failure (t=61m).
       - series: 'tvheadend_dvr_entries{status="completedError"}'
-        values: '0x60 1x15'
+        values: '_x60 1x15'
     alert_rule_test:
       - eval_time: 6m
         alertname: TvheadendDown
@@ -46,12 +49,11 @@ tests:
               summary: "No data on IPTV #1 despite subscribers"
               description: "Input has subscribers but zero bitrate for 2 minutes."
               runbook: "The source is dead while clients are stuck waiting. Check the mux/IPTV URL and ffmpeg pipe."
-      # Below 1h of history the offset-1h comparison has no prior sample to
-      # compare against, so the gauge-delta expression stays empty (no alert).
+      # No failures yet: the absent series counts as 0 on both sides (no alert).
       - eval_time: 45m
         alertname: TvheadendDvrRecordingFailed
         exp_alerts: []
-      # completedError entries step from 0 to 1 at t=61m and hold; by t=67m the
+      # The completedError series appears (value 1) at t=61m and holds; by t=67m the
       # condition has been true for 6m (>= for: 5m) so the alert fires (S1: for:
       # is required on every alert, including this one).
       - eval_time: 67m
@@ -62,3 +64,16 @@ tests:
               summary: "A recording failed in the last hour"
               description: "1 new failed DVR entries."
               runbook: "Check the DVR dashboard and Tvheadend's DVR log for the failure reason."
+  # Fresh deployment on a system that already has failed recordings: there is
+  # no data from an hour ago (neither the DVR series nor tvheadend_up), so the
+  # historic failures must not be reported as new.
+  - interval: 1m
+    input_series:
+      - series: 'tvheadend_up'
+        values: '1x40'
+      - series: 'tvheadend_dvr_entries{status="completedError"}'
+        values: '3x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: TvheadendDvrRecordingFailed
+        exp_alerts: []

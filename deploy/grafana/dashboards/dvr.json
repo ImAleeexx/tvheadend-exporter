@@ -368,7 +368,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "delta(sum(tvheadend_dvr_entries{status=\"completedError\"})[1d:1h])",
+          "expr": "delta((sum(tvheadend_dvr_entries{status=\"completedError\"}) or vector(0))[1d:1h])",
           "legendFormat": "failed",
           "refId": "A",
           "instant": false,

@@ -65,9 +65,17 @@ groups:
           runbook: "Open the Users dashboard and review peer/country breakdown."
 
       - alert: TvheadendDvrRecordingFailed
+        # The exporter emits no series for an absent status, so a missing
+        # completedError series means 0 failed entries. The hour-ago side only
+        # falls back to 0 when the exporter was up an hour ago; right after a
+        # fresh deployment there is nothing to compare against, and historic
+        # failures must not be reported as new.
         expr: >
-          sum(tvheadend_dvr_entries{status="completedError"})
-            - sum(tvheadend_dvr_entries{status="completedError"} offset 1h) > 0
+          (sum(tvheadend_dvr_entries{status="completedError"}) or vector(0))
+            - (
+              sum(tvheadend_dvr_entries{status="completedError"} offset 1h)
+                or (0 * max(tvheadend_up offset 1h))
+            ) > 0
         for: 5m
         labels: {severity: warning}
         annotations:

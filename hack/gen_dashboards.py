@@ -208,7 +208,10 @@ DASHBOARDS = {
         ts("Entries by status", "sum by (status) (tvheadend_dvr_entries)", "{{status}}", stacked=True),
         # S2 (preflight): dvr_entries is a gauge — increase() over it misreads deletions as
         # counter resets and can fire/plot spuriously. Use delta() instead.
-        ts("Failed recordings (new per day)", 'delta(sum(tvheadend_dvr_entries{status="completedError"})[1d:1h])', "failed"),
+        # `or vector(0)`: the exporter emits no series for an absent status, so
+        # without it the panel shows "No data" on a clean system and misses the
+        # first failure (a one-point subquery has no delta).
+        ts("Failed recordings (new per day)", 'delta((sum(tvheadend_dvr_entries{status="completedError"}) or vector(0))[1d:1h])', "failed"),
         bar("Recordings by creator", "sum by (creator) (tvheadend_dvr_entries)", "{{creator}}"),
         # S3 (preflight): spec §9 asks for entries "by status/owner" — add owner breakdown.
         bar("Recordings by owner", "sum by (owner) (tvheadend_dvr_entries)", "{{owner}}"),
