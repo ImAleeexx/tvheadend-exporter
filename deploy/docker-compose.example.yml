@@ -1,0 +1,18 @@
+services:
+  tvheadend-exporter:
+    image: ghcr.io/imaleeexx/tvheadend-exporter:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    ports: ["9429:9429"]
+    environment:
+      TVH_URL: http://192.0.2.20:9981
+      TVH_USERNAME: exporter
+      TVH_PASSWORD_FILE: /run/secrets/tvh_password
+      # TVH_GEOIP_DB: /geoip/GeoLite2-City.mmdb
+    secrets: [tvh_password]
+    # volumes: ["./GeoLite2-City.mmdb:/geoip/GeoLite2-City.mmdb:ro"]
+secrets:
+  tvh_password:
+    file: ./tvh_password.txt

@@ -1,0 +1,64 @@
+name: ci
+on:
+  push: {branches: [main], tags: ["v*"]}
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version-file: go.mod}
+      - run: go test ./... -race -count=1
+      - run: go vet ./...
+      - uses: golangci/golangci-lint-action@v8
+        with: {version: v2.13}
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # promtool is installed explicitly rather than via prometheus/promci,
+      # which is built for the Prometheus repo's own CI and does not
+      # reliably put promtool on PATH for downstream consumers.
+      - name: install promtool
+        run: |
+          curl -sSL https://github.com/prometheus/prometheus/releases/download/v3.14.0/prometheus-3.14.0.linux-amd64.tar.gz | tar xz --strip-components=1 -C /usr/local/bin --wildcards '*/promtool'
+      - run: promtool check rules deploy/prometheus/rules/*.yml
+      - run: cd deploy/prometheus && promtool test rules rules_test.yml
+  dashboards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 hack/gen_dashboards.py && git diff --exit-code deploy/grafana/dashboards
+      - name: validate dashboard JSON
+        run: |
+          python3 - <<'PY'
+          import json, glob
+          for f in sorted(glob.glob("deploy/grafana/dashboards/*.json")):
+              d = json.load(open(f))
+              assert d["schemaVersion"] == 39 and d["uid"] and d["panels"], f
+              ids = [p["id"] for p in d["panels"]]
+              assert len(ids) == len(set(ids)), f"duplicate ids in {f}"
+              for p in d["panels"]:
+                  assert p["gridPos"]["x"] + p["gridPos"]["w"] <= 24, (f, p["title"])
+                  for t in p.get("targets", []):
+                      assert "expr" in t, (f, p["title"])
+              print("ok", f, len(d["panels"]), "panels")
+          PY
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, rules, dashboards]
+    runs-on: ubuntu-latest
+    permissions: {contents: write, packages: write}
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-go@v5
+        with: {go-version-file: go.mod}
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with: {registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
+      - uses: goreleaser/goreleaser-action@v6
+        with: {version: "~> v2", args: release --clean}
+        env: {GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"}

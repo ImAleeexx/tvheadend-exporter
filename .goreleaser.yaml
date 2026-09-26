@@ -1,0 +1,36 @@
+version: 2
+project_name: tvheadend-exporter
+builds:
+  - main: ./cmd/tvheadend-exporter
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags: ["-s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}}"]
+archives:
+  - formats: [tar.gz]
+    files: [README.md, LICENSE, deploy/prometheus/**, deploy/grafana/**, deploy/tvheadend-exporter.service]
+# dockers_v2 (not the deprecated `dockers` pipe): a single entry builds and
+# pushes a multi-arch manifest via buildx in one step, so no separate
+# docker_manifests section is needed. The build still happens from source
+# inside deploy/Dockerfile (see extra_files below) rather than by copying a
+# goreleaser-built binary, matching the Dockerfile used for standalone
+# `docker build`.
+dockers_v2:
+  - images: ["ghcr.io/imaleeexx/tvheadend-exporter"]
+    dockerfile: deploy/Dockerfile
+    tags:
+      - "{{ .Version }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    build_args:
+      VERSION: "{{ .Version }}"
+      COMMIT: "{{ .ShortCommit }}"
+    extra_files:
+      - go.mod
+      - go.sum
+      - cmd
+      - internal
+changelog:
+  use: git
