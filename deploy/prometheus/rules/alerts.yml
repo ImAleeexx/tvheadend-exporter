@@ -1,0 +1,87 @@
+groups:
+  - name: tvheadend.alerts
+    rules:
+      - alert: TvheadendDown
+        expr: tvheadend_up == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Tvheadend unreachable"
+          description: "The exporter has not completed a status poll against Tvheadend for 5 minutes."
+          runbook: "Check that Tvheadend is running and that the exporter credentials still have admin rights."
+
+      - alert: TvheadendExporterPollFailing
+        expr: increase(tvheadend_exporter_poll_errors_total[10m]) > 5
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Exporter poll group {{ $labels.group }} failing"
+          description: "{{ $value | printf \"%.0f\" }} failed polls in 10 minutes."
+          runbook: "Inspect exporter logs; look for timeouts or HTTP errors on tvheadend_exporter_api_requests_total."
+
+      - alert: TvheadendInputContinuityErrors
+        expr: rate(tvheadend_input_continuity_errors_total[5m]) > 1 and on (uuid) tvheadend_input_subscriptions > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Continuity errors on {{ $labels.input }}"
+          description: "{{ $value | printf \"%.2f\" }} CC errors/s for 5 minutes on an input with active subscribers."
+          runbook: "Source stream is corrupt or the network path drops packets; check the upstream IPTV source or tuner signal."
+
+      - alert: TvheadendInputNoBitrate
+        expr: tvheadend_input_bitrate_bps == 0 and on (uuid) tvheadend_input_subscriptions > 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "No data on {{ $labels.input }} despite subscribers"
+          description: "Input has subscribers but zero bitrate for 2 minutes."
+          runbook: "The source is dead while clients are stuck waiting. Check the mux/IPTV URL and ffmpeg pipe."
+
+      - alert: TvheadendSubscriptionErrorSpike
+        expr: sum by (user, channel) (rate(tvheadend_session_errors_total[5m])) > 0.5
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Stream errors for {{ $labels.user }} on {{ $labels.channel }}"
+          description: "{{ $value | printf \"%.2f\" }} errors/s over 5 minutes."
+          runbook: "Correlate with input errors; if only one user is affected suspect their network."
+
+      - alert: TvheadendUserOverConnLimit
+        expr: tvheadend_user_active_streams > on (user) (tvheadend_user_conn_limit > 0)
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.user }} exceeds connection limit"
+          description: "User has {{ $value }} active streams, above the configured limit."
+          runbook: "Tvheadend enforces limits per connection type; check for shared credentials."
+
+      - alert: TvheadendUserMultipleIPs
+        expr: tvheadend:user_peers:count > 3
+        for: 10m
+        labels: {severity: info}
+        annotations:
+          summary: "{{ $labels.user }} streaming from {{ $value }} IPs"
+          description: "Possible shared account."
+          runbook: "Open the Users dashboard and review peer/country breakdown."
+
+      - alert: TvheadendDvrRecordingFailed
+        expr: >
+          sum(tvheadend_dvr_entries{status="completedError"})
+            - sum(tvheadend_dvr_entries{status="completedError"} offset 1h) > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "A recording failed in the last hour"
+          description: "{{ $value | printf \"%.0f\" }} new failed DVR entries."
+          runbook: "Check the DVR dashboard and Tvheadend's DVR log for the failure reason."
+
+      - alert: TvheadendNetworkScanFailures
+        expr: >
+          sum by (network) (tvheadend_muxes{scan_result="fail"})
+            / sum by (network) (tvheadend_muxes) > 0.5
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: "Over half of muxes failed scanning on {{ $labels.network }}"
+          description: "{{ $value | humanizePercentage }} of muxes report scan failure."
+          runbook: "For IPTV networks the playlist may have rotated URLs; for DVB check the LNB/dish."

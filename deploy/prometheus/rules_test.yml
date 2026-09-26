@@ -1,0 +1,64 @@
+rule_files:
+  - rules/recording.yml
+  - rules/alerts.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'tvheadend_up'
+        values: '0x10'
+      - series: 'tvheadend_user_active_streams{user="alice"}'
+        values: '5x10'
+      - series: 'tvheadend_user_conn_limit{user="alice"}'
+        values: '4x10'
+      - series: 'tvheadend_user_conn_limit{user="bob"}'
+        values: '0x10'
+      - series: 'tvheadend_user_active_streams{user="bob"}'
+        values: '9x10'
+      - series: 'tvheadend_input_bitrate_bps{uuid="u1",input="IPTV #1"}'
+        values: '0x10'
+      - series: 'tvheadend_input_subscriptions{uuid="u1",input="IPTV #1"}'
+        values: '2x10'
+      - series: 'tvheadend_dvr_entries{status="completedError"}'
+        values: '0x60 1x15'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: TvheadendDown
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "Tvheadend unreachable"
+              description: "The exporter has not completed a status poll against Tvheadend for 5 minutes."
+              runbook: "Check that Tvheadend is running and that the exporter credentials still have admin rights."
+      - eval_time: 3m
+        alertname: TvheadendUserOverConnLimit
+        exp_alerts:
+          - exp_labels: {severity: warning, user: alice}
+            exp_annotations:
+              summary: "alice exceeds connection limit"
+              description: "User has 5 active streams, above the configured limit."
+              runbook: "Tvheadend enforces limits per connection type; check for shared credentials."
+      - eval_time: 3m
+        alertname: TvheadendInputNoBitrate
+        exp_alerts:
+          - exp_labels: {severity: critical, uuid: u1, input: "IPTV #1"}
+            exp_annotations:
+              summary: "No data on IPTV #1 despite subscribers"
+              description: "Input has subscribers but zero bitrate for 2 minutes."
+              runbook: "The source is dead while clients are stuck waiting. Check the mux/IPTV URL and ffmpeg pipe."
+      # Below 1h of history the offset-1h comparison has no prior sample to
+      # compare against, so the gauge-delta expression stays empty (no alert).
+      - eval_time: 45m
+        alertname: TvheadendDvrRecordingFailed
+        exp_alerts: []
+      # completedError entries step from 0 to 1 at t=61m and hold; by t=67m the
+      # condition has been true for 6m (>= for: 5m) so the alert fires (S1: for:
+      # is required on every alert, including this one).
+      - eval_time: 67m
+        alertname: TvheadendDvrRecordingFailed
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "A recording failed in the last hour"
+              description: "1 new failed DVR entries."
+              runbook: "Check the DVR dashboard and Tvheadend's DVR log for the failure reason."

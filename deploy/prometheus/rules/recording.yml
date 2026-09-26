@@ -1,0 +1,20 @@
+groups:
+  - name: tvheadend.recording
+    interval: 1m
+    rules:
+      - record: tvheadend:channel_watch_seconds:rate1h
+        expr: sum by (channel) (rate(tvheadend_session_seconds_total[1h]))
+      - record: tvheadend:channel_watch_seconds:rate24h
+        expr: sum by (channel) (rate(tvheadend_session_seconds_total[24h]))
+      - record: tvheadend:channel_watch_seconds:increase7d
+        expr: sum by (channel) (increase(tvheadend_session_seconds_total[7d]))
+      - record: tvheadend:user_watch_seconds:increase24h
+        expr: sum by (user) (increase(tvheadend_session_seconds_total[24h]))
+      - record: tvheadend:user_bytes_out:increase24h
+        expr: sum by (user) (increase(tvheadend_session_bytes_out_total[24h]))
+      - record: tvheadend:client_watch_seconds:increase7d
+        expr: sum by (client) (increase(tvheadend_session_seconds_total[7d]))
+      - record: tvheadend:input_bitrate_bps:avg5m
+        expr: avg by (input) (avg_over_time(tvheadend_input_bitrate_bps[5m]))
+      - record: tvheadend:user_peers:count
+        expr: count by (user) (count by (user, peer) (tvheadend_subscription_info))

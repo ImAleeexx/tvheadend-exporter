@@ -16,6 +16,7 @@ lint:
 
 rules:
 	promtool check rules deploy/prometheus/rules/*.yml
+	cd deploy/prometheus && promtool test rules rules_test.yml
 
 dashboards:
 	python3 hack/gen_dashboards.py

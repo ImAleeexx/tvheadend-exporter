@@ -1,0 +1,5 @@
+# Add to your prometheus.yml scrape_configs:
+- job_name: tvheadend
+  scrape_interval: 15s
+  static_configs:
+    - targets: ["tvheadend-exporter:9429"]
