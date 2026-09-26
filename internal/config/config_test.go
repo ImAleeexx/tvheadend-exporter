@@ -189,3 +189,25 @@ func TestLoad_HelpFlagPrintsUsageToStderr(t *testing.T) {
 		t.Errorf("want usage text on stderr, got %q", string(out))
 	}
 }
+
+// Spec §12: credentials come from env or file only; argv is visible in ps.
+func TestLoad_NoPasswordFlag(t *testing.T) {
+	_, err := Load([]string{"-password", "secret"}, env(map[string]string{
+		"TVH_URL": "http://tvh:9981", "TVH_USERNAME": "u", "TVH_PASSWORD": "p",
+	}), noFile)
+	if err == nil || !strings.Contains(err.Error(), "flag provided but not defined") {
+		t.Errorf("want -password rejected as undefined flag, got %v", err)
+	}
+}
+
+func TestLoad_PasswordFileFlag(t *testing.T) {
+	c, err := Load([]string{"-password-file", "/secret"}, env(map[string]string{
+		"TVH_URL": "http://tvh:9981", "TVH_USERNAME": "u",
+	}), func(p string) ([]byte, error) { return []byte("filepw\n"), nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Password != "filepw" {
+		t.Errorf("want filepw got %q", c.Password)
+	}
+}

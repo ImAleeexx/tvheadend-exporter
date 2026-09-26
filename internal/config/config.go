@@ -25,7 +25,8 @@ type Config struct {
 }
 
 // Load parses args (flags) with environment defaults (TVH_ prefix).
-// Flags win over env. TVH_PASSWORD_FILE wins over TVH_PASSWORD.
+// Flags win over env. The password is env/file only (TVH_PASSWORD, or
+// -password-file / TVH_PASSWORD_FILE, which wins).
 func Load(args []string, getenv func(string) string, readFile func(string) ([]byte, error)) (Config, error) {
 	var c Config
 	fs := flag.NewFlagSet("tvheadend-exporter", flag.ContinueOnError)
@@ -62,7 +63,10 @@ func Load(args []string, getenv func(string) string, readFile func(string) ([]by
 	var passwordFile string
 	str(&c.URL, "url", "TVH_URL", "", "Tvheadend base URL")
 	str(&c.Username, "username", "TVH_USERNAME", "", "Tvheadend username")
-	str(&c.Password, "password", "TVH_PASSWORD", "", "Tvheadend password")
+	// No -password flag: argv is visible in ps (spec §12). The password
+	// comes from TVH_PASSWORD, or from a file via -password-file /
+	// TVH_PASSWORD_FILE (which wins).
+	c.Password = getenv("TVH_PASSWORD")
 	str(&passwordFile, "password-file", "TVH_PASSWORD_FILE", "", "file containing the password")
 	dur(&c.PollStatus, "poll-status", "TVH_POLL_STATUS", 10*time.Second, "status poll interval")
 	dur(&c.PollTopology, "poll-topology", "TVH_POLL_TOPOLOGY", 60*time.Second, "topology/DVR poll interval")
@@ -115,7 +119,7 @@ func (c Config) validate() error {
 		errs = append(errs, errors.New("-username / TVH_USERNAME is required"))
 	}
 	if c.Password == "" {
-		errs = append(errs, errors.New("-password / TVH_PASSWORD or TVH_PASSWORD_FILE is required"))
+		errs = append(errs, errors.New("TVH_PASSWORD or -password-file / TVH_PASSWORD_FILE is required"))
 	}
 	for name, d := range map[string]time.Duration{
 		"poll-status": c.PollStatus, "poll-topology": c.PollTopology, "timeout": c.Timeout, "session-grace": c.SessionGrace,
