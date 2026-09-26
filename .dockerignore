@@ -1,0 +1,8 @@
+# Allowlist: only what deploy/Dockerfile needs to build (and what
+# .goreleaser.yaml dockers_v2 extra_files provides). Keeps local secrets,
+# tooling state and the rest of the repo out of the build context.
+*
+!go.mod
+!go.sum
+!cmd
+!internal
