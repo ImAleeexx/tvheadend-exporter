@@ -88,6 +88,40 @@ func (s *Status) labels(sess sessions.Session) []string {
 	return []string{sess.User, sess.Channel, sess.Client, sess.Peer, sess.Profile, loc.Country, loc.City}
 }
 
+// sanitizeLabel strips secrets from free-text API values (service, title):
+// every URL is reduced to scheme://host (userinfo, path and query dropped;
+// a URL ends at whitespace, since IPTV mux URLs sit inside "net/mux/service"
+// names and their path cannot be told apart from what follows), and DVR
+// subscription titles ("DVR: <programme>") collapse to "DVR".
+func sanitizeLabel(v string) string {
+	if strings.HasPrefix(v, "DVR:") {
+		return "DVR"
+	}
+	var b strings.Builder
+	for {
+		i := strings.Index(v, "://")
+		if i < 0 {
+			b.WriteString(v)
+			return b.String()
+		}
+		b.WriteString(v[:i+3])
+		rest := v[i+3:]
+		end := strings.IndexAny(rest, " \t\r\n")
+		if end < 0 {
+			end = len(rest)
+		}
+		host := rest[:end]
+		if j := strings.IndexAny(host, "/?#"); j >= 0 {
+			host = host[:j]
+		}
+		if j := strings.LastIndex(host, "@"); j >= 0 {
+			host = host[j+1:]
+		}
+		b.WriteString(host)
+		v = rest[end:]
+	}
+}
+
 // subType maps a connection type onto the subscriptions_active.type domain.
 func subType(connType string) string {
 	switch t := strings.ToLower(connType); t {
@@ -147,11 +181,11 @@ func sessionFrom(raw tvh.Subscription) sessions.Session {
 }
 
 // Fail records a failed status poll. Once the tracker declares sessions lost,
-// every series derived from the last good snapshot is dropped too.
+// every series derived from the last good snapshot is dropped too — even
+// when that snapshot held connections but no subscriptions.
 func (s *Status) Fail(now time.Time) {
-	evs := s.tracker.Fail(now)
-	s.handle(evs, true)
-	if len(evs) > 0 {
+	s.handle(s.tracker.Fail(now), true)
+	if s.tracker.Lost(now) {
 		s.clearSnapshot()
 	}
 	s.sessionsTracked.Set(float64(s.tracker.Len()))
@@ -212,7 +246,7 @@ func (s *Status) addDeltas(ev sessions.Event, lv []string) {
 
 func (s *Status) setGauges(sess sessions.Session, lv []string) {
 	idlv := append([]string{sess.ID}, lv...)
-	info := append(append(make([]string, 0, len(idlv)+3), idlv...), sess.Service, sess.State, sess.Title)
+	info := append(append(make([]string, 0, len(idlv)+3), idlv...), sanitizeLabel(sess.Service), sess.State, sanitizeLabel(sess.Title))
 	s.subInfo.WithLabelValues(info...).Set(1)
 	s.subStart.WithLabelValues(idlv...).Set(float64(sess.APIStart.Unix()))
 	s.subBitrateIn.WithLabelValues(idlv...).Set(float64(sess.BitrateIn))

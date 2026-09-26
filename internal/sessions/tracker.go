@@ -187,10 +187,16 @@ func (t *Tracker) Apply(subs []tvh.Subscription, now time.Time) []Event {
 // Fail records a failed poll; after the grace period all sessions end as
 // lost.
 func (t *Tracker) Fail(now time.Time) []Event {
-	if t.lastOK.IsZero() || now.Sub(t.lastOK) <= t.grace {
+	if !t.Lost(now) {
 		return nil
 	}
 	return t.EndAll(now, ReasonLost)
+}
+
+// Lost reports whether more than the grace period has passed since the last
+// successful poll, regardless of whether any sessions are tracked.
+func (t *Tracker) Lost(now time.Time) bool {
+	return !t.lastOK.IsZero() && now.Sub(t.lastOK) > t.grace
 }
 
 // EndAll ends every session with the given reason.

@@ -187,3 +187,21 @@ func TestFail_LostEnd_LastSeenIsNow(t *testing.T) {
 		t.Errorf("LastSeen = %v, want %v", evs[0].Session.LastSeen, lostAt)
 	}
 }
+
+func TestLost_GraceExceededEvenWithoutSessions(t *testing.T) {
+	tr := New(time.Minute)
+	if tr.Lost(t0) {
+		t.Fatal("never polled: must not be lost")
+	}
+	tr.Apply(nil, t0)
+	if tr.Lost(t0.Add(time.Minute)) {
+		t.Error("at grace boundary: must not be lost")
+	}
+	if !tr.Lost(t0.Add(61 * time.Second)) {
+		t.Error("beyond grace with no sessions: must be lost")
+	}
+	tr.Apply(nil, t0.Add(2*time.Minute))
+	if tr.Lost(t0.Add(2*time.Minute + time.Second)) {
+		t.Error("after a successful poll: must not be lost")
+	}
+}

@@ -279,6 +279,70 @@ tvheadend_subscription_info{channel="XTRM",city="",client="VLC/3.0.20 LibVLC/3.0
 	}
 }
 
+func TestSanitizeLabel(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"IPTV #1/THOTH/playlist.php - XTRM/Service01", "IPTV #1/THOTH/playlist.php - XTRM/Service01"},
+		{"IPTV/http://xt.example.com:8080/USER/PASS/123.ts", "IPTV/http://xt.example.com:8080"},
+		{"IPTV/https://cdn.example.net/live/ch1.m3u8?token=s3cr3t&x=1", "IPTV/https://cdn.example.net"},
+		{"IPTV/http://user:pw@198.51.100.9:9981/stream/channel/abc", "IPTV/http://198.51.100.9:9981"},
+		{"a udp://239.0.0.1:1234 b", "a udp://239.0.0.1:1234 b"},
+		{"x http://h/p?q=1 and rtsp://h2/p2", "x http://h and rtsp://h2"},
+		{"DVR: Secret Programme Title", "DVR"},
+		{"HTTP", "HTTP"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := sanitizeLabel(c.in); got != c.want {
+			t.Errorf("sanitizeLabel(%q)=%q want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestStatusCollector_SanitizesServiceAndTitle(t *testing.T) {
+	s, reg, buf := newStatus(t)
+	a := tvh.Subscription{ID: 7, Start: tvh.FlexInt(t0.Unix()), Username: "eve", Channel: "X", Hostname: "192.0.2.3", Profile: "pass",
+		Service: "IPTV/http://USER:PASS@xt.example.com:8080/USER/PASS/123.ts?token=abc", Title: "DVR: My Programme"}
+	s.Update([]tvh.Subscription{a}, nil, t0)
+	s.Update(nil, nil, t0.Add(10*time.Second))
+	s.Update([]tvh.Subscription{a}, nil, t0.Add(20*time.Second))
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	for _, mf := range mfs {
+		out.WriteString(mf.String())
+	}
+	out.WriteString(buf.String())
+	for _, leak := range []string{"USER", "PASS", "123.ts", "token", "My Programme"} {
+		if strings.Contains(out.String(), leak) {
+			t.Errorf("exposition or log leaks %q", leak)
+		}
+	}
+	g, err := s.subInfo.GetMetricWithLabelValues("7", "eve", "X", "", "192.0.2.3", "pass", "", "", "IPTV/http://xt.example.com:8080", "", "DVR")
+	if err != nil || testutil.ToFloat64(g) != 1 {
+		t.Errorf("sanitized subscription_info missing: %v", err)
+	}
+}
+
+// A poll with connections but no subscriptions, then an outage beyond grace:
+// connection series must not linger (Review Focus 3).
+func TestStatusCollector_LostClearsConnectionsWithoutSessions(t *testing.T) {
+	s, reg, _ := newStatus(t)
+	_, conns := fixtureSubs(t)
+	s.Update(nil, conns, t0)
+	s.Fail(t0.Add(30 * time.Second))
+	if n := count(t, reg, "tvheadend_connection_info"); n != 3 {
+		t.Fatalf("inside grace connection_info must stay: %d", n)
+	}
+	s.Fail(t0.Add(2 * time.Minute))
+	for _, name := range []string{"tvheadend_connection_info", "tvheadend_connections_active"} {
+		if n := count(t, reg, name); n != 0 {
+			t.Errorf("after grace %s must be cleared: %d series", name, n)
+		}
+	}
+}
+
 func TestStatusCollector_Lint(t *testing.T) {
 	s, reg, _ := newStatus(t)
 	subs, conns := fixtureSubs(t)
