@@ -1,0 +1,5 @@
+{"entries":[
+ {"id":15268,"start":1790449892,"errors":6,"state":"Running","hostname":"203.0.113.10","username":"alice","client":"Kodi Media Center","title":"203.0.113.10 [ alice | Kodi Media Center ]","channel":"La 1 HD","service":"IPTV #2/IPTV/LA 1 HD IPTV/Service01","pids":[100,101],"profile":"htsp","in":964252,"out":913912,"total_in":1068084400,"total_out":1033170269},
+ {"id":15276,"start":1790450847,"errors":"6","state":"Running","hostname":"198.51.100.7","username":"bob","client":"VLC/3.0.23 LibVLC/3.0.23","title":"HTTP","channel":"La 1 HD","service":"IPTV #2/IPTV/LA 1 HD IPTV/Service01","pids":[100,101],"profile":"pass","in":964252,"out":964252,"total_in":148543876,"total_out":148543876},
+ {"id":15280,"start":1790450900,"errors":0,"state":"Running","hostname":"10.0.0.5","username":"","client":"VLC/3.0.20 LibVLC/3.0.20","title":"HTTP","channel":"XTRM","service":"IPTV #1/THOTH/playlist.php - XTRM/Service01","pids":[256],"profile":"pass","in":100000,"out":100000,"total_in":5000,"total_out":5000}
+],"totalCount":3}

@@ -1,0 +1,4 @@
+{"entries":[
+ {"uuid":"a83ead2b96370a88f68dffe6382d32d9","input":"IPTV #1","stream":"playlist.php - LA 1 UHD in THOTH","subs":2,"weight":150,"pids":[0,1],"signal":0,"signal_scale":0,"ber":0,"snr":0,"snr_scale":0,"unc":0,"bps":2092064,"te":0,"cc":0,"ec_bit":0,"tc_bit":0,"ec_block":0,"tc_block":0},
+ {"uuid":"897ce2936829f07918e4f0020e513b6a","input":"Montage Technology M88RS6000 #1 : DVB-S #0","subs":0,"weight":0,"signal":0,"signal_scale":0,"ber":0,"snr":0,"snr_scale":0,"unc":0,"bps":0,"te":0,"cc":387,"ec_bit":0,"tc_bit":0,"ec_block":0,"tc_block":0}
+],"totalCount":2}

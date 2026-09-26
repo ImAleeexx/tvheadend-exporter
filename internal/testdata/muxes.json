@@ -1,0 +1,5 @@
+{"entries":[
+ {"uuid":"m1","enabled":1,"network":"THOTH","network_uuid":"4d749bc77a453903128bb427afbb8a8b","name":"playlist.php - Telecinco","scan_state":0,"scan_result":1,"num_svc":1,"num_chn":0},
+ {"uuid":"m2","enabled":1,"network":"THOTH","network_uuid":"4d749bc77a453903128bb427afbb8a8b","name":"playlist.php - Cuatro","scan_state":0,"scan_result":2,"num_svc":0,"num_chn":0},
+ {"uuid":"m3","enabled":0,"network":"Satelite","network_uuid":"11111111111111111111111111111111","name":"11000H","scan_state":0,"scan_result":3,"num_svc":4,"num_chn":1}
+],"total":3}

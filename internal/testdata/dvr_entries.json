@@ -1,0 +1,6 @@
+{"entries":[
+ {"uuid":"d1","sched_status":"completed","status":"Completed OK","errors":0,"data_errors":1383,"filesize":1373117220,"duration":6600,"owner":"admin","creator":"alice","config_name":"966571e4cf855e95e5a94c4481217c4a","start":1743204600,"stop":1743210000},
+ {"uuid":"d2","sched_status":"completedError","status":"Time missed","errors":0,"data_errors":0,"filesize":0,"duration":8400,"owner":"admin","creator":"bob","config_name":"966571e4cf855e95e5a94c4481217c4a","start":1750006800,"stop":1750014000},
+ {"uuid":"d3","sched_status":"scheduled","status":"Scheduled for recording","errors":0,"data_errors":0,"filesize":0,"duration":3600,"owner":"admin","creator":"bob","config_name":"509f31336490ae45e6927c8c00d2bb23","start":4102444800,"stop":4102448400},
+ {"uuid":"d4","sched_status":"recording","status":"Running","errors":0,"data_errors":2,"filesize":1000,"duration":3600,"owner":"admin","creator":"alice","config_name":"509f31336490ae45e6927c8c00d2bb23","start":1790450000,"stop":1790453600}
+],"total":4}

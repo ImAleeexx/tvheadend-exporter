@@ -1,0 +1,5 @@
+{"entries":[
+ {"uuid":"4d749bc77a453903128bb427afbb8a8b","class":"iptv_network","enabled":true,"networkname":"THOTH","nid":0,"max_streams":0,"max_bandwidth":0,"max_timeout":40,"num_mux":206,"num_svc":201,"num_chn":163,"scanq_length":0},
+ {"uuid":"fff1ff271bc631bcf04a1521f9ab6b79","class":"iptv_network","enabled":true,"networkname":"IPTV","nid":0,"max_streams":0,"max_bandwidth":0,"max_timeout":15,"num_mux":72,"num_svc":92,"num_chn":30,"scanq_length":0},
+ {"uuid":"11111111111111111111111111111111","class":"dvb_network_dvbs","enabled":false,"networkname":"Satelite","nid":0,"orbital_pos":"19.2E","num_mux":165,"num_svc":2129,"num_chn":40,"scanq_length":2}
+],"total":3}

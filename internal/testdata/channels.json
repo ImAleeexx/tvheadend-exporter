@@ -1,0 +1,4 @@
+{"entries":[
+ {"uuid":"c1","enabled":true,"name":"Telecinco","number":5,"tags":["t1"],"services":["s1"]},
+ {"uuid":"c2","enabled":false,"name":"Old","number":999,"tags":["t1","t2"],"services":[]}
+],"total":2}

@@ -1,0 +1,5 @@
+{"entries":[
+ {"uuid":"s1","network":"THOTH","multiplex":"playlist.php - Telecinco","multiplex_uuid":"m1","sid":1,"svcname":"Service01","enabled":true,"channel":["c1"],"encrypted":false},
+ {"uuid":"s2","network":"Satelite","multiplex":"11000H","multiplex_uuid":"m3","sid":2,"svcname":"Svc","enabled":true,"channel":[],"encrypted":true},
+ {"uuid":"s3","network":"Satelite","multiplex":"11000H","multiplex_uuid":"m3","sid":3,"svcname":"Svc2","enabled":false,"channel":[],"encrypted":true}
+],"total":3}

@@ -1,0 +1,5 @@
+{"entries":[
+ {"uuid":"a1","enabled":true,"username":"alice","conn_limit":4,"conn_limit_type":0,"admin":false},
+ {"uuid":"a2","enabled":true,"username":"bob","conn_limit":0,"conn_limit_type":0,"admin":false},
+ {"uuid":"a3","enabled":false,"username":"carol","conn_limit":2,"conn_limit_type":0,"admin":false}
+],"total":3}

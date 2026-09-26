@@ -1,0 +1,5 @@
+{"entries":[
+ {"id":228337,"server":"192.0.2.20","server_port":9982,"peer":"203.0.113.10","peer_port":46316,"started":1790449880,"streaming":1,"type":"HTSP","user":"alice"},
+ {"id":228445,"server":"192.0.2.20","server_port":9981,"peer":"198.51.100.7","peer_port":17626,"started":1790450846,"streaming":1,"type":"HTTP","user":"bob"},
+ {"id":228228,"server":"192.0.2.20","server_port":9981,"peer":"10.0.0.5","peer_port":37956,"started":1790448855,"streaming":1,"type":"HTTP"}
+],"totalCount":3}
