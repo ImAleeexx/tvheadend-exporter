@@ -49,6 +49,33 @@ func TestInputsCollector_RetuneKeepsNumericSeries(t *testing.T) {
 	}
 }
 
+// An unnamed IPTV mux can report its URL as the stream name; it must never be
+// exported (spec §2/§12).
+func TestInputsCollector_SanitizesStream(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	c := NewInputs(reg)
+	c.Update([]tvh.Input{{UUID: "u1", Input: "IPTV #1", Stream: "http://USER:PASS@xt.example.com:8080/USER/PASS/123.ts?token=abc", Weight: 150}})
+	if v := testutil.ToFloat64(c.info.vec.WithLabelValues("u1", "IPTV #1", "<url>", "150")); v != 1 {
+		t.Errorf("sanitized input_info missing: %v", v)
+	}
+	if n := count(t, reg, "tvheadend_input_info"); n != 1 {
+		t.Errorf("input_info series=%d want 1", n)
+	}
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	for _, mf := range mfs {
+		out.WriteString(mf.String())
+	}
+	for _, leak := range []string{"USER", "PASS", "token", "://", "xt.example.com"} {
+		if strings.Contains(out.String(), leak) {
+			t.Errorf("exposition leaks %q", leak)
+		}
+	}
+}
+
 func TestInputsCollector_CounterResetDetection(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	c := NewInputs(reg)

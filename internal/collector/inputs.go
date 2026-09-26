@@ -95,7 +95,7 @@ func (c *Inputs) Update(inputs []tvh.Input) {
 	seen := map[string]bool{}
 	for _, in := range inputs {
 		seen[in.UUID] = true
-		c.info.set(1, in.UUID, in.Input, in.Stream, strconv.FormatInt(int64(in.Weight), 10))
+		c.info.set(1, in.UUID, in.Input, sanitizeLabel(in.Stream), strconv.FormatInt(int64(in.Weight), 10))
 		for _, g := range inputGauges {
 			c.gauges[g.name].set(float64(g.get(in)), in.UUID, in.Input)
 		}
