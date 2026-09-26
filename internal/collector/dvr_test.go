@@ -93,12 +93,8 @@ func TestDVRCollector_StaleSeriesDropped(t *testing.T) {
 		t.Errorf("autorec after drop=%v", v)
 	}
 
-	count, err := testutil.GatherAndCount(reg, "tvheadend_dvr_entries")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if count != 1 {
-		t.Errorf("expected 1 surviving series, got %d", count)
+	if n := count(t, reg, "tvheadend_dvr_entries"); n != 1 {
+		t.Errorf("expected 1 surviving series, got %d", n)
 	}
 }
 
