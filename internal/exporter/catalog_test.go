@@ -28,3 +28,16 @@ func TestCatalog(t *testing.T) {
 		t.Error("rows must be sorted by name")
 	}
 }
+
+// Metrics registered only under some configuration must say so in the
+// catalogue, since the generator runs with every optional feature enabled.
+func TestCatalog_ConditionalMetricNoted(t *testing.T) {
+	reg := newRecordingRegistry()
+	reg.MustRegister(prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "tvheadend_exporter_geoip_lookups_total", Help: "GeoIP lookups by result.",
+	}, []string{"result"}))
+	want := "| `tvheadend_exporter_geoip_lookups_total` | counter | `result` | GeoIP lookups by result. Present only when `TVH_GEOIP_DB` is set. |"
+	if md := Catalog(reg); !strings.Contains(md, want) {
+		t.Errorf("missing %q in:\n%s", want, md)
+	}
+}

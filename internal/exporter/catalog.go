@@ -47,6 +47,12 @@ var histograms = map[string]bool{
 	"tvheadend_exporter_api_request_duration_seconds": true,
 }
 
+// conditional notes metrics that are only registered under some
+// configuration; `make metrics-doc` runs with every optional feature on.
+var conditional = map[string]string{
+	"tvheadend_exporter_geoip_lookups_total": "Present only when `TVH_GEOIP_DB` is set.",
+}
+
 // Catalog renders a markdown table of all registered metrics.
 func Catalog(reg *recordingRegistry) string {
 	type row struct{ name, typ, labels, help string }
@@ -77,6 +83,9 @@ func Catalog(reg *recordingRegistry) string {
 			help, err := strconv.Unquote(m[2])
 			if err != nil {
 				help = m[2]
+			}
+			if note, ok := conditional[m[1]]; ok {
+				help += " " + note
 			}
 			rows = append(rows, row{m[1], typ, labels, strings.ReplaceAll(help, "|", `\|`)})
 		}
