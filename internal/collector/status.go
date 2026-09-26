@@ -29,8 +29,8 @@ type Status struct {
 	subsActive, userActive, channelViewers, connsActive, connInfo, userConnLimit, accessEntries *labelSet
 
 	sessionSeconds, sessionBytesOut, sessionBytesIn, sessionsStarted, sessionsEnded, sessionErrors *prometheus.CounterVec
-	sessionDuration                                                                            *prometheus.HistogramVec
-	sessionsTracked                                                                            prometheus.Gauge
+	sessionDuration                                                                                *prometheus.HistogramVec
+	sessionsTracked                                                                                prometheus.Gauge
 
 	// types joins subscriptions to the current poll's connections:
 	// "user\x00peer" -> htsp|http|unknown.
@@ -38,6 +38,10 @@ type Status struct {
 	// sessTypes remembers the type last observed per live session id so a
 	// session_end line keeps it after the connection has vanished.
 	sessTypes map[string]string
+	// sessInfo remembers the subscription_info label tuple last exported per
+	// live session id, so a label change (state, GeoIP, ...) replaces the
+	// session's per-id series instead of leaving the old tuple behind.
+	sessInfo map[string]string
 }
 
 // NewStatus registers all status metrics on reg.
@@ -48,7 +52,7 @@ func NewStatus(reg prometheus.Registerer, tr *sessions.Tracker, geo geoip.Resolv
 	c := func(name, help string) *prometheus.CounterVec {
 		return prometheus.NewCounterVec(prometheus.CounterOpts{Name: "tvheadend_" + name, Help: help}, sessionLabels)
 	}
-	s := &Status{tracker: tr, geo: geo, log: log, types: map[string]string{}, sessTypes: map[string]string{},
+	s := &Status{tracker: tr, geo: geo, log: log, types: map[string]string{}, sessTypes: map[string]string{}, sessInfo: map[string]string{},
 		subInfo:       g("subscription_info", "Live subscription; value is always 1.", append(withID(sessionLabels), "service", "state", "title")),
 		subStart:      g("subscription_start_timestamp_seconds", "Subscription start time (unix).", withID(sessionLabels)),
 		subBitrateIn:  g("subscription_bitrate_in_bps", "Current input bitrate of the subscription.", withID(sessionLabels)),
@@ -234,6 +238,7 @@ func (s *Status) handle(evs []sessions.Event, observe bool) {
 				typ = typeUnknown
 			}
 			delete(s.sessTypes, ev.Session.ID)
+			delete(s.sessInfo, ev.Session.ID)
 			s.deleteGauges(ev.Session.ID)
 			s.sessionsEnded.WithLabelValues(lv...).Inc()
 			if observe {
@@ -254,6 +259,11 @@ func (s *Status) addDeltas(ev sessions.Event, lv []string) {
 func (s *Status) setGauges(sess sessions.Session, lv []string) {
 	idlv := append([]string{sess.ID}, lv...)
 	info := append(append(make([]string, 0, len(idlv)+3), idlv...), sanitizeLabel(sess.Service), sess.State, sanitizeLabel(sess.Title))
+	key := strings.Join(info, "\xff")
+	if prev, ok := s.sessInfo[sess.ID]; ok && prev != key {
+		s.deleteGauges(sess.ID)
+	}
+	s.sessInfo[sess.ID] = key
 	s.subInfo.WithLabelValues(info...).Set(1)
 	s.subStart.WithLabelValues(idlv...).Set(float64(sess.APIStart.Unix()))
 	s.subBitrateIn.WithLabelValues(idlv...).Set(float64(sess.BitrateIn))

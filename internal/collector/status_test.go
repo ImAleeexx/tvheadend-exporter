@@ -358,3 +358,57 @@ func TestStatusCollector_Lint(t *testing.T) {
 		t.Errorf("lint: %s: %s", p.Metric, p.Text)
 	}
 }
+
+// mutableGeo returns whatever location is currently stored, so a test can
+// simulate a GeoIP answer changing for a live session.
+type mutableGeo struct{ loc geoip.Location }
+
+func (m *mutableGeo) Lookup(string) geoip.Location { return m.loc }
+
+// A label change on a live session (state, or a GeoIP city) must replace its
+// per-id series rather than leaving the old tuple behind.
+func TestStatusCollector_LabelChangeKeepsOneSeriesPerID(t *testing.T) {
+	perID := []string{
+		"tvheadend_subscription_info", "tvheadend_subscription_start_timestamp_seconds",
+		"tvheadend_subscription_bitrate_in_bps", "tvheadend_subscription_bitrate_out_bps",
+		"tvheadend_subscription_bytes_in", "tvheadend_subscription_bytes_out",
+		"tvheadend_subscription_errors",
+	}
+	check := func(t *testing.T, reg prometheus.Gatherer, want int) {
+		t.Helper()
+		for _, name := range perID {
+			if n := count(t, reg, name); n != want {
+				t.Errorf("%s series=%d want %d", name, n, want)
+			}
+		}
+	}
+
+	t.Run("state", func(t *testing.T) {
+		s, reg, _ := newStatus(t)
+		subs, conns := fixtureSubs(t)
+		s.Update(subs, conns, t0)
+		check(t, reg, 3)
+		changed := append([]tvh.Subscription(nil), subs...)
+		changed[0].State = "Bad"
+		s.Update(changed, conns, t0.Add(10*time.Second))
+		check(t, reg, 3)
+	})
+
+	t.Run("geoip city", func(t *testing.T) {
+		reg := prometheus.NewRegistry()
+		geo := &mutableGeo{loc: geoip.Location{Country: "ES", City: "Madrid"}}
+		s := NewStatus(reg, sessions.New(time.Minute), geo, slog.New(slog.DiscardHandler))
+		a := tvh.Subscription{ID: 1, Start: tvh.FlexInt(t0.Unix()), Username: "bob", Channel: "X", Hostname: "198.51.100.7", Profile: "pass"}
+		s.Update([]tvh.Subscription{a}, nil, t0)
+		check(t, reg, 1)
+		geo.loc.City = "Barcelona"
+		s.Update([]tvh.Subscription{a}, nil, t0.Add(10*time.Second))
+		check(t, reg, 1)
+		if _, err := s.subInfo.GetMetricWithLabelValues("1", "bob", "X", "", "198.51.100.7", "pass", "ES", "Barcelona", "", "", ""); err != nil {
+			t.Fatal(err)
+		}
+		if n := count(t, reg, "tvheadend_subscription_info"); n != 1 {
+			t.Errorf("after lookup, info series=%d want 1 (Barcelona only)", n)
+		}
+	})
+}
