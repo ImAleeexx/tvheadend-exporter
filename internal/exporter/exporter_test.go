@@ -360,15 +360,16 @@ func TestEndToEnd(t *testing.T) {
 		return missing(logBuf.String(), `"event":"session_end"`, `"reason":"gone"`)
 	})
 
-	// Secrets in free-text fields: service URLs are reduced to scheme://host
-	// and DVR titles collapse to "DVR"; credentials, tokens, URL paths and
-	// programme titles must not appear in /metrics or the log.
+	// Secrets in free-text fields: service URLs collapse to "<url>" and DVR
+	// titles to "DVR"; no URL part (scheme, host, credentials, path, token)
+	// nor programme title may appear in /metrics or the log.
 	srv.Set("subscriptions", "subscriptions_secrets.json")
 	eventually(t, "sanitised subscription", func() string {
 		out = metricsBody()
-		return missing(out, `tvheadend_subscription_info{channel="XTRM",city="",client="tvh DVR",country="",id="15300",peer="192.0.2.44",profile="pass",service="IPTV #1/THOTH/http://iptv.example.net:8080 Service01",state="Running",title="DVR",user="dave"} 1`)
+		return missing(out, `tvheadend_subscription_info{channel="XTRM",city="",client="tvh DVR",country="",id="15300",peer="192.0.2.44",profile="pass",service="IPTV #1/THOTH/<url> Service01",state="Running",title="DVR",user="dave"} 1`)
 	})
-	secrets := []string{"hunter2", "dave:", "token=", "s3cr3tT0ken", "/live/", "123.ts", "Secret Programme", e2ePassword, "passwd"}
+	secrets := []string{"hunter2", "dave:", "token=", "s3cr3tT0ken", "/live/", "123.ts", "Secret Programme", e2ePassword, "passwd",
+		"http://", "https://", "iptv.example.net"}
 	if msg := present(out, secrets...); msg != "" {
 		t.Error("/metrics " + msg)
 	}

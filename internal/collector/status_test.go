@@ -282,11 +282,14 @@ tvheadend_subscription_info{channel="XTRM",city="",client="VLC/3.0.20 LibVLC/3.0
 func TestSanitizeLabel(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"IPTV #1/THOTH/playlist.php - XTRM/Service01", "IPTV #1/THOTH/playlist.php - XTRM/Service01"},
-		{"IPTV/http://xt.example.com:8080/USER/PASS/123.ts", "IPTV/http://xt.example.com:8080"},
-		{"IPTV/https://cdn.example.net/live/ch1.m3u8?token=s3cr3t&x=1", "IPTV/https://cdn.example.net"},
-		{"IPTV/http://user:pw@198.51.100.9:9981/stream/channel/abc", "IPTV/http://198.51.100.9:9981"},
-		{"a udp://239.0.0.1:1234 b", "a udp://239.0.0.1:1234 b"},
-		{"x http://h/p?q=1 and rtsp://h2/p2", "x http://h and rtsp://h2"},
+		{"IPTV/http://xt.example.com:8080/USER/PASS/123.ts", "IPTV/<url>"},
+		{"IPTV/https://cdn.example.net/live/ch1.m3u8?token=s3cr3t&x=1", "IPTV/<url>"},
+		{"IPTV/http://user:pw@198.51.100.9:9981/stream/channel/abc", "IPTV/<url>"},
+		{"a udp://239.0.0.1:1234 b", "a <url> b"},
+		{"x http://h/p?q=1 and rtsp://h2/p2", "x <url> and <url>"},
+		{"IPTV #1/THOTH/http://u:p@iptv.example.net:8080/live?token=t Service01", "IPTV #1/THOTH/<url> Service01"},
+		{"svc/git+ssh://host/x", "svc/<url>"},
+		{"://nohost", "<url>"},
 		{"DVR: Secret Programme Title", "DVR"},
 		{"HTTP", "HTTP"},
 		{"", ""},
@@ -314,12 +317,12 @@ func TestStatusCollector_SanitizesServiceAndTitle(t *testing.T) {
 		out.WriteString(mf.String())
 	}
 	out.WriteString(buf.String())
-	for _, leak := range []string{"USER", "PASS", "123.ts", "token", "My Programme"} {
+	for _, leak := range []string{"USER", "PASS", "123.ts", "token", "My Programme", "://", "xt.example.com", "8080"} {
 		if strings.Contains(out.String(), leak) {
 			t.Errorf("exposition or log leaks %q", leak)
 		}
 	}
-	g, err := s.subInfo.GetMetricWithLabelValues("7", "eve", "X", "", "192.0.2.3", "pass", "", "", "IPTV/http://xt.example.com:8080", "", "DVR")
+	g, err := s.subInfo.GetMetricWithLabelValues("7", "eve", "X", "", "192.0.2.3", "pass", "", "", "IPTV/<url>", "", "DVR")
 	if err != nil || testutil.ToFloat64(g) != 1 {
 		t.Errorf("sanitized subscription_info missing: %v", err)
 	}
