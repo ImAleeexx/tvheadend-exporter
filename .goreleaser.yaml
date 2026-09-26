@@ -8,7 +8,7 @@ builds:
     ldflags: ["-s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}}"]
 archives:
   - formats: [tar.gz]
-    files: [README.md, LICENSE, deploy/prometheus/**, deploy/grafana/**, deploy/tvheadend-exporter.service]
+    files: [LICENSE, deploy/prometheus/**, deploy/grafana/**, deploy/tvheadend-exporter.service]
 # dockers_v2 (not the deprecated `dockers` pipe): a single entry builds and
 # pushes a multi-arch manifest via buildx in one step, so no separate
 # docker_manifests section is needed. The build still happens from source
