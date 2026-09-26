@@ -31,7 +31,11 @@ func Load(args []string, getenv func(string) string, readFile func(string) ([]by
 	fs := flag.NewFlagSet("tvheadend-exporter", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
-	var envErrs []error
+	// envErrs holds a parse error per flag name for a malformed TVH_* duration
+	// env var. It is only surfaced for flags the caller did NOT explicitly set
+	// on the command line (checked via fs.Visit after Parse), since a valid
+	// flag override should win over a bad env default rather than fail Load.
+	envErrs := map[string]error{}
 
 	str := func(p *string, name, env, def, usage string) {
 		if v := getenv(env); v != "" {
@@ -43,7 +47,7 @@ func Load(args []string, getenv func(string) string, readFile func(string) ([]by
 		if v := getenv(env); v != "" {
 			d, err := time.ParseDuration(v)
 			if err != nil {
-				envErrs = append(envErrs, fmt.Errorf("%s: invalid duration %q: %w", env, v, err))
+				envErrs[name] = fmt.Errorf("%s: invalid duration %q: %w", env, v, err)
 			} else {
 				def = d
 			}
@@ -78,8 +82,17 @@ func Load(args []string, getenv func(string) string, readFile func(string) ([]by
 		}
 		return c, err
 	}
+	// A flag explicitly set on the command line overrides its env default,
+	// including a malformed one, so drop any envErrs for flags that were set.
+	fs.Visit(func(f *flag.Flag) {
+		delete(envErrs, f.Name)
+	})
 	if len(envErrs) > 0 {
-		return c, errors.Join(envErrs...)
+		errs := make([]error, 0, len(envErrs))
+		for _, e := range envErrs {
+			errs = append(errs, e)
+		}
+		return c, errors.Join(errs...)
 	}
 	if passwordFile != "" {
 		b, err := readFile(passwordFile)

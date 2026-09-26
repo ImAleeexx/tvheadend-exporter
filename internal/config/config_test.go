@@ -117,6 +117,46 @@ func TestLoad_InvalidEnvDuration(t *testing.T) {
 	}
 }
 
+// TestLoad_InvalidEnvDurationOverriddenByFlag covers review round 1 finding:
+// a malformed TVH_* duration env var must NOT fail Load when the same
+// setting is explicitly overridden on the command line with a valid flag
+// value — the flag wins, so the bad env default is irrelevant.
+func TestLoad_InvalidEnvDurationOverriddenByFlag(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		env  map[string]string
+	}{
+		{
+			"poll-status",
+			[]string{"-poll-status", "5s"},
+			map[string]string{"TVH_URL": "http://x", "TVH_USERNAME": "u", "TVH_PASSWORD": "p", "TVH_POLL_STATUS": "not-a-duration"},
+		},
+		{
+			"poll-topology",
+			[]string{"-poll-topology", "90s"},
+			map[string]string{"TVH_URL": "http://x", "TVH_USERNAME": "u", "TVH_PASSWORD": "p", "TVH_POLL_TOPOLOGY": "banana"},
+		},
+		{
+			"timeout",
+			[]string{"-timeout", "5s"},
+			map[string]string{"TVH_URL": "http://x", "TVH_USERNAME": "u", "TVH_PASSWORD": "p", "TVH_TIMEOUT": "5"},
+		},
+		{
+			"session-grace",
+			[]string{"-session-grace", "30s"},
+			map[string]string{"TVH_URL": "http://x", "TVH_USERNAME": "u", "TVH_PASSWORD": "p", "TVH_SESSION_GRACE": "xyz"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := Load(tc.args, env(tc.env), noFile); err != nil {
+				t.Errorf("want no error when flag overrides bad env, got %v", err)
+			}
+		})
+	}
+}
+
 // TestLoad_HelpFlagPrintsUsageToStderr covers preflight finding X31/N8:
 // -h must print flag usage instead of being silently discarded via
 // fs.SetOutput(io.Discard). It should surface flag.ErrHelp so callers can
