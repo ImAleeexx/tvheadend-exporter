@@ -22,7 +22,7 @@ dashboards:
 	python3 hack/gen_dashboards.py
 
 metrics-doc: build
-	./bin/tvheadend-exporter -dump-metrics > docs/METRICS.md
+	TVH_URL=http://localhost TVH_USERNAME=x TVH_PASSWORD=x TVH_GEOIP_DB=internal/testdata/GeoIP2-City-Test.mmdb ./bin/tvheadend-exporter -dump-metrics > docs/METRICS.md
 
 smoke: build
 	./bin/tvheadend-exporter -listen 127.0.0.1:9429 & pid=$$!; sleep 15; \
