@@ -49,6 +49,8 @@ Everything can be set by env var or flag (`-h` lists the flags).
 | `TVH_LOG_FORMAT` | `json` | `json` or `text` |
 | `TVH_LOG_LEVEL` | `info` | |
 | `TVH_TLS_INSECURE_SKIP_VERIFY` | `false` | |
+| `TVH_METRICS_USERNAME` | — | protect `/metrics` with basic auth |
+| `TVH_METRICS_PASSWORD` / `TVH_METRICS_PASSWORD_FILE` | — | set together with the username; the file wins |
 
 ## What it exports
 
@@ -82,6 +84,17 @@ When a session ends it also writes a log line, which is handy if you ship logs t
 ```
 
 ## Prometheus and Grafana
+
+If you set `TVH_METRICS_USERNAME`/`TVH_METRICS_PASSWORD`, add the same credentials to the scrape job. `/healthz` and `/-/ready` stay open for health checks.
+
+```yaml
+- job_name: tvheadend
+  basic_auth:
+    username: prom
+    password_file: /etc/prometheus/tvheadend_exporter_password
+  static_configs:
+    - targets: ["tvheadend-exporter:9429"]
+```
 
 - Scrape config: `deploy/prometheus/scrape.yml`
 - Recording and alerting rules: `deploy/prometheus/rules/` (Tvheadend down, polling failing, input with no bitrate, continuity errors, subscription error spikes, user over connection limit or on several IPs, failed recordings, mux scan failures)

@@ -11,6 +11,8 @@ services:
       TVH_USERNAME: exporter
       TVH_PASSWORD_FILE: /run/secrets/tvh_password
       # TVH_GEOIP_DB: /geoip/GeoLite2-City.mmdb
+      # TVH_METRICS_USERNAME: prom
+      # TVH_METRICS_PASSWORD_FILE: /run/secrets/metrics_password
     secrets: [tvh_password]
     # volumes: ["./GeoLite2-City.mmdb:/geoip/GeoLite2-City.mmdb:ro"]
 secrets:

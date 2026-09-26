@@ -22,6 +22,10 @@ type Config struct {
 	LogFormat, LogLevel      string
 	TLSInsecureSkipVerify    bool
 	DumpMetrics              bool
+
+	// MetricsUsername/MetricsPassword enable HTTP basic auth on the
+	// exporter's own /metrics endpoint. Both empty means no auth.
+	MetricsUsername, MetricsPassword string
 }
 
 // Load parses args (flags) with environment defaults (TVH_ prefix).
@@ -78,6 +82,10 @@ func Load(args []string, getenv func(string) string, readFile func(string) ([]by
 	str(&c.LogLevel, "log-level", "TVH_LOG_LEVEL", "info", "log level: debug|info|warn|error")
 	boolean(&c.TLSInsecureSkipVerify, "tls-insecure-skip-verify", "TVH_TLS_INSECURE_SKIP_VERIFY", "skip TLS verification")
 	fs.BoolVar(&c.DumpMetrics, "dump-metrics", false, "print metric catalogue as markdown and exit")
+	var metricsPasswordFile string
+	str(&c.MetricsUsername, "metrics-username", "TVH_METRICS_USERNAME", "", "username required to scrape /metrics (empty = no auth)")
+	c.MetricsPassword = getenv("TVH_METRICS_PASSWORD")
+	str(&metricsPasswordFile, "metrics-password-file", "TVH_METRICS_PASSWORD_FILE", "", "file containing the /metrics password")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -105,6 +113,13 @@ func Load(args []string, getenv func(string) string, readFile func(string) ([]by
 		}
 		c.Password = strings.TrimSpace(string(b))
 	}
+	if metricsPasswordFile != "" {
+		b, err := readFile(metricsPasswordFile)
+		if err != nil {
+			return c, fmt.Errorf("read -metrics-password-file: %w", err)
+		}
+		c.MetricsPassword = strings.TrimSpace(string(b))
+	}
 	return c, c.validate()
 }
 
@@ -120,6 +135,9 @@ func (c Config) validate() error {
 	}
 	if c.Password == "" {
 		errs = append(errs, errors.New("TVH_PASSWORD or -password-file / TVH_PASSWORD_FILE is required"))
+	}
+	if (c.MetricsUsername == "") != (c.MetricsPassword == "") {
+		errs = append(errs, errors.New("-metrics-username / TVH_METRICS_USERNAME and TVH_METRICS_PASSWORD (or -metrics-password-file) must be set together"))
 	}
 	for name, d := range map[string]time.Duration{
 		"poll-status": c.PollStatus, "poll-topology": c.PollTopology, "timeout": c.Timeout, "session-grace": c.SessionGrace,

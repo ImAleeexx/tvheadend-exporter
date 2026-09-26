@@ -211,3 +211,47 @@ func TestLoad_PasswordFileFlag(t *testing.T) {
 		t.Errorf("want filepw got %q", c.Password)
 	}
 }
+
+func TestLoad_MetricsAuth(t *testing.T) {
+	base := map[string]string{"TVH_URL": "http://tvh:9981", "TVH_USERNAME": "u", "TVH_PASSWORD": "p"}
+	with := func(extra map[string]string) map[string]string {
+		m := map[string]string{}
+		for k, v := range base {
+			m[k] = v
+		}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return m
+	}
+
+	c, err := Load(nil, env(base), noFile)
+	if err != nil || c.MetricsUsername != "" || c.MetricsPassword != "" {
+		t.Fatalf("auth should be off by default: %+v %v", c, err)
+	}
+
+	c, err = Load(nil, env(with(map[string]string{"TVH_METRICS_USERNAME": "prom", "TVH_METRICS_PASSWORD": "envpw"})), noFile)
+	if err != nil || c.MetricsUsername != "prom" || c.MetricsPassword != "envpw" {
+		t.Fatalf("env auth: %+v %v", c, err)
+	}
+
+	c, err = Load([]string{"-metrics-username", "flaguser"}, env(with(map[string]string{
+		"TVH_METRICS_USERNAME": "prom", "TVH_METRICS_PASSWORD": "envpw", "TVH_METRICS_PASSWORD_FILE": "/secret",
+	})), func(string) ([]byte, error) { return []byte("filepw\n"), nil })
+	if err != nil || c.MetricsUsername != "flaguser" || c.MetricsPassword != "filepw" {
+		t.Fatalf("flag/file precedence: %+v %v", c, err)
+	}
+
+	for name, extra := range map[string]map[string]string{
+		"user only":     {"TVH_METRICS_USERNAME": "prom"},
+		"password only": {"TVH_METRICS_PASSWORD": "pw"},
+	} {
+		if _, err := Load(nil, env(with(extra)), noFile); err == nil || !strings.Contains(err.Error(), "TVH_METRICS_USERNAME") {
+			t.Errorf("%s: want error naming TVH_METRICS_USERNAME, got %v", name, err)
+		}
+	}
+
+	if _, err := Load(nil, env(with(map[string]string{"TVH_METRICS_USERNAME": "prom", "TVH_METRICS_PASSWORD_FILE": "/missing"})), noFile); err == nil || !strings.Contains(err.Error(), "metrics-password-file") {
+		t.Errorf("unreadable metrics password file: want error, got %v", err)
+	}
+}

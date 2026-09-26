@@ -1,5 +1,9 @@
 # Add to your prometheus.yml scrape_configs:
 - job_name: tvheadend
   scrape_interval: 15s
+  # Only if the exporter runs with TVH_METRICS_USERNAME/TVH_METRICS_PASSWORD:
+  # basic_auth:
+  #   username: prom
+  #   password_file: /etc/prometheus/tvheadend_exporter_password
   static_configs:
     - targets: ["tvheadend-exporter:9429"]

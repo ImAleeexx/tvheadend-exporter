@@ -72,7 +72,7 @@ func run() error {
 		}
 	}()
 
-	log.Info("starting", "version", version, "commit", commit, "listen", cfg.Listen)
+	log.Info("starting", "version", version, "commit", commit, "listen", cfg.Listen, "metrics_auth", cfg.MetricsUsername != "")
 	return ex.Run(ctx)
 }
 

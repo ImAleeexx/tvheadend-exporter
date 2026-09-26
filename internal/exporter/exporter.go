@@ -3,6 +3,8 @@ package exporter
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -194,7 +196,7 @@ func (e *Exporter) pollServer(ctx context.Context) error {
 // Handler serves /metrics, /healthz, /-/ready and a landing page.
 func (e *Exporter) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.HandlerFor(e.reg, promhttp.HandlerOpts{}))
+	mux.Handle("/metrics", e.requireAuth(promhttp.HandlerFor(e.reg, promhttp.HandlerOpts{})))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		n := e.lastStatusOK.Load()
 		if n == 0 {
@@ -209,15 +211,38 @@ func (e *Exporter) Handler() http.Handler {
 		_, _ = fmt.Fprintln(w, "ok")
 	})
 	mux.HandleFunc("/-/ready", func(w http.ResponseWriter, _ *http.Request) { _, _ = fmt.Fprintln(w, "ok") })
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/", e.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = fmt.Fprint(w, `<html><head><title>Tvheadend Exporter</title></head><body><h1>Tvheadend Exporter</h1><p><a href="/metrics">Metrics</a> · <a href="/healthz">Health</a></p></body></html>`)
-	})
+	})))
 	return mux
+}
+
+// requireAuth wraps h with HTTP basic auth when metrics credentials are
+// configured; otherwise it returns h unchanged. Health probes are not wrapped.
+func (e *Exporter) requireAuth(h http.Handler) http.Handler {
+	if e.cfg.MetricsUsername == "" {
+		return h
+	}
+	wantUser := sha256.Sum256([]byte(e.cfg.MetricsUsername))
+	wantPass := sha256.Sum256([]byte(e.cfg.MetricsPassword))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, pass, ok := r.BasicAuth()
+		gotUser := sha256.Sum256([]byte(user))
+		gotPass := sha256.Sum256([]byte(pass))
+		userOK := subtle.ConstantTimeCompare(gotUser[:], wantUser[:]) == 1
+		passOK := subtle.ConstantTimeCompare(gotPass[:], wantPass[:]) == 1
+		if !ok || !userOK || !passOK {
+			w.Header().Set("WWW-Authenticate", `Basic realm="tvheadend-exporter", charset="UTF-8"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
 }
 
 // Run starts pollers and the HTTP server. It returns after ctx is done (nil)

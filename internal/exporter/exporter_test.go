@@ -418,3 +418,53 @@ func TestCheck_Unauthorized(t *testing.T) {
 		t.Errorf("want unauthorized error, got %v", err)
 	}
 }
+
+func TestHandler_MetricsBasicAuth(t *testing.T) {
+	cfg := testConfig("http://127.0.0.1:1")
+	cfg.MetricsUsername, cfg.MetricsPassword = "prom", "s3cret"
+	e, err := New(cfg, discard(), "v-test", "abc123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := e.Handler()
+	req := func(path, user, pass string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodGet, path, nil)
+		if user != "" || pass != "" {
+			r.SetBasicAuth(user, pass)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		return rec
+	}
+
+	for _, path := range []string{"/metrics", "/"} {
+		if rec := req(path, "", ""); rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Header().Get("WWW-Authenticate"), "Basic") {
+			t.Errorf("%s without credentials: code %d, WWW-Authenticate %q", path, rec.Code, rec.Header().Get("WWW-Authenticate"))
+		}
+		if rec := req(path, "prom", "wrong"); rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s wrong password: code %d", path, rec.Code)
+		}
+		if rec := req(path, "other", "s3cret"); rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s wrong user: code %d", path, rec.Code)
+		}
+		if rec := req(path, "prom", "s3cret"); rec.Code != http.StatusOK {
+			t.Errorf("%s good credentials: code %d", path, rec.Code)
+		}
+	}
+	if rec := req("/metrics", "prom", "s3cret"); !strings.Contains(rec.Body.String(), "tvheadend_exporter_build_info") {
+		t.Error("authenticated /metrics did not return metrics")
+	}
+	// Probes stay open so orchestrators need no credentials.
+	if rec := req("/-/ready", "", ""); rec.Code != http.StatusOK {
+		t.Errorf("/-/ready should not require auth, got %d", rec.Code)
+	}
+	if rec := req("/healthz", "", ""); rec.Code == http.StatusUnauthorized {
+		t.Error("/healthz should not require auth")
+	}
+}
+
+func TestHandler_NoAuthByDefault(t *testing.T) {
+	if code, _ := get(t, newTestExporter(t, "http://127.0.0.1:1").Handler(), "/metrics"); code != http.StatusOK {
+		t.Errorf("/metrics without auth configured: code %d", code)
+	}
+}
